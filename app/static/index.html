@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>cronohelper</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23101a26'/><text y='12' x='2.5' font-size='11' fill='%236fb2e8' font-family='monospace'>c</text></svg>">
+</head>
+<body>
+
+<header class="bar">
+  <h1>cronohelper</h1>
+  <span class="sub">weekly lunch &rarr; Cronometer</span>
+  <span class="spacer"></span>
+  <span class="hint" id="conn"></span>
+</header>
+
+<main>
+
+  <section id="input-pane">
+    <p class="legend">Paste</p>
+    <textarea id="paste" spellcheck="false" autocapitalize="off" autocorrect="off"
+      placeholder="2026-08-31 Hétfő&#10;ED1 1 adag Könnyű tejfölös zöldbableves*: 1095 FT (1095 FT)&#10;(174kcal, 19.9g szénh., 5.2g fehérje, 6.8g zsír)&#10;--------------------------------------------------------------"></textarea>
+    <div class="actions">
+      <button id="parse-btn" class="primary">Parse</button>
+      <button id="sample-btn" type="button">Load sample</button>
+      <button id="clear-btn" type="button">Clear</button>
+      <span class="hint"><kbd>Ctrl</kbd>/<kbd>&#8984;</kbd>+<kbd>Enter</kbd> to confirm import</span>
+    </div>
+    <div id="issues" class="issues" hidden>
+      <h2>Parse failed &mdash; nothing was imported</h2>
+      <div id="issue-list"></div>
+    </div>
+  </section>
+
+  <section id="preview-pane" hidden>
+    <div id="conflicts" class="conflicts" hidden>
+      <h2>Macro conflicts &mdash; decide before importing</h2>
+      <div id="conflict-list"></div>
+    </div>
+
+    <p class="legend">Preview &mdash; drag a portion between days, or set its date</p>
+    <div class="grid" id="grid"></div>
+
+    <div class="actions">
+      <button id="add-day-btn" type="button">+ Add day</button>
+      <span class="hint" id="grid-hint"></span>
+    </div>
+
+    <p class="legend" style="margin-top:1.1rem">Totals</p>
+    <table class="summary" id="summary"></table>
+  </section>
+
+  <section id="results-pane" hidden>
+    <p class="legend">Result</p>
+    <div class="results" id="results"></div>
+  </section>
+
+</main>
+
+<footer class="confirm" id="confirm-bar" hidden>
+  <span class="state" id="state"></span>
+  <span class="spacer"></span>
+  <button id="import-btn" class="primary">Import</button>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

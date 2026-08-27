@@ -1,0 +1,15 @@
+.env
+.venv/
+.git/
+.gitignore
+data/
+tests/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+Makefile
+tasks.ps1
+README.md
+spike_food_search.py
+spike-output*.txt

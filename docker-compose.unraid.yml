@@ -1,0 +1,46 @@
+# Unraid variant. Differs from docker-compose.yml in exactly three ways, each
+# of which matters on Unraid and nowhere else:
+#
+#   1. Runs as 99:100 (nobody:users). The image's own uid is 10001, which
+#      cannot write to an appdata directory owned by nobody — the app would
+#      start, answer /healthz, and then 500 on the first request that touches
+#      SQLite. The app writes nothing outside /data, so running under the
+#      host's ids is safe.
+#   2. Bind-mounts /mnt/user/appdata instead of using a named volume, so the
+#      database sits where every other Unraid app keeps its state and gets
+#      picked up by appdata backups.
+#   3. Publishes on all interfaces, because the entire point is reaching it
+#      from a laptop or phone on the LAN.
+#
+# Usage on the Unraid box:
+#
+#     mkdir -p /mnt/user/appdata/cronohelper
+#     chown -R 99:100 /mnt/user/appdata/cronohelper
+#     docker compose -f docker-compose.unraid.yml up -d --build
+#
+services:
+  cronohelper:
+    build: .
+    image: cronohelper:latest
+    container_name: cronohelper
+    restart: unless-stopped
+
+    # Unraid's nobody:users. Must match the owner of the appdata directory.
+    user: "99:100"
+
+    env_file: .env
+
+    environment:
+      # Diary entries are stamped in the account timezone. Keep aligned with
+      # your Cronometer account setting.
+      TZ: ${TZ:-Europe/Budapest}
+      DATA_DIR: /data
+
+    ports:
+      # LAN-visible. This app has NO authentication of its own — do not
+      # port-forward it, and do not put it on an untrusted network.
+      - "${PORT:-8080}:8080"
+
+    volumes:
+      # SQLite database, food-id cache, and the Cronometer session token.
+      - /mnt/user/appdata/cronohelper:/data

@@ -1,0 +1,30 @@
+services:
+  cronohelper:
+    build: .
+    image: cronohelper:latest
+    container_name: cronohelper
+    restart: unless-stopped
+
+    # Credentials come from .env and never leave the container. Copy
+    # .env.example to .env first; .env is gitignored.
+    env_file: .env
+
+    environment:
+      # Diary entries are stamped in the account timezone. Keep this aligned
+      # with your Cronometer account setting.
+      TZ: ${TZ:-Europe/Budapest}
+      DATA_DIR: /data
+
+    ports:
+      # Loopback by default: this app has no authentication of its own, so it
+      # must not be reachable from the internet. To use it from your phone on
+      # the LAN, set BIND_ADDR=0.0.0.0 in .env — and only on a trusted network.
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-8080}:8080"
+
+    volumes:
+      # SQLite database, the food-id cache, and the Cronometer session token.
+      # Survives `docker compose down`; removed only by `down -v`.
+      - cronohelper-data:/data
+
+volumes:
+  cronohelper-data:

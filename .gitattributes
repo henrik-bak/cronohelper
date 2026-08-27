@@ -1,0 +1,13 @@
+# Normalise to LF in the repository and in working copies. The project is
+# authored on Windows but built and run in a Linux container, so keeping LF
+# everywhere avoids CRLF ever reaching the image.
+* text=auto eol=lf
+
+# PowerShell is the one Windows-native file here; CRLF is its convention.
+*.ps1 text eol=crlf
+
+# Binary-ish / generated: never touch these.
+uv.lock -text
+*.png binary
+*.jpg binary
+*.ico binary

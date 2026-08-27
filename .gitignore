@@ -1,0 +1,33 @@
+# Credentials. Never commit this — it holds the Cronometer password in plain
+# text. .env.example is the tracked template.
+.env
+.env.*
+!.env.example
+
+# Local state: SQLite database, food-id cache, and the Cronometer session
+# token. Machine-specific and contains an auth token.
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+session.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Spike output — dumps raw API responses from a real account.
+spike-output*.txt
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

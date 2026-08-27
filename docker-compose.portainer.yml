@@ -1,0 +1,53 @@
+# Portainer stack variant: no `build:`, so it can be pasted straight into
+# Portainer's Web editor.
+#
+# Portainer cannot build from a Web-editor stack — there is no build context —
+# so the image has to already exist on the Unraid Docker daemon. Build it once
+# over SSH:
+#
+#     cd /mnt/user/projects/cronohelper
+#     docker build -t cronohelper:latest .
+#
+# (or `docker save cronohelper:latest | ssh root@unraid docker load` from your
+# workstation). After that, redeploys are Portainer-only until the code
+# changes.
+#
+# If you would rather Portainer own the build too, put this project in a Git
+# repo and use Stacks -> Add stack -> Repository, pointing at
+# docker-compose.unraid.yml, which does have a `build:` stanza.
+#
+# Before deploying:
+#     mkdir -p /mnt/user/appdata/cronohelper
+#     chown -R 99:100 /mnt/user/appdata/cronohelper
+#
+# Set these in Portainer's "Environment variables" panel rather than shipping a
+# .env file onto a share — that is the one real advantage of doing this in
+# Portainer:
+#     CRONOMETER_USERNAME   your Cronometer account email
+#     CRONOMETER_PASSWORD   your Cronometer password
+#     TZ                    Europe/Budapest
+#     PORT                  8080
+#
+services:
+  cronohelper:
+    image: cronohelper:latest
+    container_name: cronohelper
+    restart: unless-stopped
+
+    # Unraid's nobody:users. Must match the owner of the appdata directory —
+    # the image's own uid is 10001 and cannot write there. Symptom if this is
+    # wrong: /healthz returns ok, every other endpoint returns 500.
+    user: "99:100"
+
+    environment:
+      CRONOMETER_USERNAME: ${CRONOMETER_USERNAME:?set this in the Portainer stack UI}
+      CRONOMETER_PASSWORD: ${CRONOMETER_PASSWORD:?set this in the Portainer stack UI}
+      TZ: ${TZ:-Europe/Budapest}
+      DATA_DIR: /data
+
+    ports:
+      # LAN-visible. No authentication in front of it — do not port-forward.
+      - "${PORT:-8080}:8080"
+
+    volumes:
+      - /mnt/user/appdata/cronohelper:/data

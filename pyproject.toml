@@ -1,0 +1,26 @@
+[project]
+name = "cronohelper"
+version = "0.1.0"
+description = "Parse a Hungarian food-delivery weekly summary and import it into Cronometer."
+# 3.14, not 3.12: cronometer-api-mcp's client.py uses PEP 758 unparenthesized
+# `except A, B:` (3 occurrences), which is a SyntaxError on <=3.13. See README.
+requires-python = ">=3.14"
+dependencies = [
+    "cronometer-api-mcp==0.2.1",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.uv]
+package = false
