@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
@@ -35,7 +36,25 @@ logger = logging.getLogger("cronohelper")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Check the data directory at boot.
+
+    Without this the container starts, serves the page, and only falls over
+    when someone pastes a week — a slow and confusing way to discover that a
+    bind mount is owned by the wrong user. Logged rather than raised so the
+    container still comes up and can explain itself over HTTP.
+    """
+    try:
+        db.check_writable()
+        logger.info("data directory ok: %s", db.DATA_DIR)
+    except db.DataDirNotWritable as exc:
+        logger.error("STARTUP CHECK FAILED\n%s", exc)
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="cronohelper",
     description="Parse a Hungarian food-delivery weekly summary into Cronometer.",
     # No public docs: this is a LAN tool and the schema is not the product.
@@ -43,6 +62,16 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+
+@app.exception_handler(db.DataDirNotWritable)
+async def data_dir_not_writable(
+    request: Request, exc: db.DataDirNotWritable
+) -> JSONResponse:
+    """A uid/permissions problem, not a bug. Return the whole explanation --
+    it contains the exact commands that fix it and no sensitive data."""
+    logger.error("data directory not writable: %s", exc)
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @app.exception_handler(Exception)
@@ -143,10 +172,22 @@ def _payload_dict(req: PayloadRequest) -> dict:
 
 
 @app.get("/healthz")
-def healthz() -> dict:
-    """Container health. Deliberately does not touch Cronometer -- health must
-    not depend on a third party, and must never trigger a login."""
-    return {"status": "ok"}
+def healthz() -> JSONResponse:
+    """Container health.
+
+    Deliberately does not touch Cronometer -- health must not depend on a
+    third party, and must never trigger a login. It *does* check the data
+    directory: a container that cannot write its own database is not healthy,
+    and reporting ok here is what let a permissions problem masquerade as a
+    working deployment.
+    """
+    try:
+        db.check_writable()
+    except db.DataDirNotWritable as exc:
+        return JSONResponse(
+            status_code=503, content={"status": "unhealthy", "detail": str(exc)}
+        )
+    return JSONResponse({"status": "ok", "database": "writable"})
 
 
 @app.post("/api/parse")

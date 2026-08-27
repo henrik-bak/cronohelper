@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -47,8 +50,44 @@ def payload_from(parsed, *, breakfast=True, decisions=None):
 
 
 def test_healthz_never_touches_cronometer(api):
-    assert api.get("/healthz").json() == {"status": "ok"}
+    assert api.get("/healthz").json() == {"status": "ok", "database": "writable"}
     assert api.fake.calls.total() == 0
+
+
+def test_healthz_is_unhealthy_when_the_data_dir_is_unwritable(api, monkeypatch):
+    # A container that cannot write its own database is not healthy. Reporting
+    # ok here is what let a bind-mount permissions problem look like a working
+    # deployment until the first paste.
+    def denied(*a, **kw):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "write_text", denied)
+
+    r = api.get("/healthz")
+
+    assert r.status_code == 503
+    assert r.json()["status"] == "unhealthy"
+    assert "chown -R 99:100" in r.json()["detail"]
+
+
+def test_an_unwritable_data_dir_explains_itself_instead_of_a_traceback(
+    api, monkeypatch
+):
+    # sqlite3 reports this as a bare "unable to open database file", which says
+    # nothing about the actual cause being a uid mismatch on a bind mount.
+    def denied(*a, **kw):
+        raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(sqlite3, "connect", denied)
+    client = TestClient(main.app, raise_server_exceptions=False)
+
+    r = client.get("/api/history")
+
+    assert r.status_code == 503
+    detail = r.json()["detail"]
+    assert "not writable by the container's user" in detail
+    assert "chown -R 99:100 /mnt/user/appdata/cronohelper" in detail
+    assert "unable to open database file" in detail, "keep the underlying cause"
 
 
 def test_parse_is_pure(api):

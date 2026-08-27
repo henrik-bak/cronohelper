@@ -26,6 +26,50 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
 DB_PATH = DATA_DIR / "cronohelper.sqlite3"
 SESSION_PATH = DATA_DIR / "session.json"
 
+class DataDirNotWritable(RuntimeError):
+    """The mounted data directory cannot be written to.
+
+    Almost always a container/host uid mismatch rather than anything to do
+    with the database itself, so the message says how to fix that directly.
+    """
+
+
+def _identity() -> str:
+    """uid/gid of this process, where the platform has them."""
+    if hasattr(os, "getuid"):
+        return f"uid={os.getuid()}, gid={os.getgid()}"
+    return "this user"
+
+
+def _explain(path: Path, exc: Exception) -> DataDirNotWritable:
+    return DataDirNotWritable(
+        f"Cannot open the database at {path}. The data directory is not "
+        f"writable by the container's user ({_identity()}). "
+        f"The directory itself may exist and still be unwritable — Docker "
+        f"creates a missing bind-mount path as root. On Unraid, fix it with:\n"
+        f"    mkdir -p /mnt/user/appdata/cronohelper\n"
+        f"    chown -R 99:100 /mnt/user/appdata/cronohelper\n"
+        f"    docker restart cronohelper\n"
+        f"(underlying error: {type(exc).__name__}: {exc})"
+    )
+
+
+def check_writable(db_path: Path | None = None) -> None:
+    """Raise DataDirNotWritable unless the data directory can be written.
+
+    Called at startup and by /healthz so the problem shows up immediately,
+    rather than as a traceback the first time someone pastes a week.
+    """
+    path = db_path or DB_PATH
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        probe = path.parent / ".write-probe"
+        probe.write_text("ok")
+        probe.unlink()
+    except OSError as exc:
+        raise _explain(path, exc) from None
+
+
 _SCHEMA = """
 PRAGMA journal_mode=WAL;
 
@@ -88,8 +132,14 @@ def init(db_path: Path | None = None) -> None:
 @contextmanager
 def connect(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
     path = db_path or DB_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path)
+    except (sqlite3.OperationalError, OSError) as exc:
+        # mkdir(exist_ok=True) succeeds on a directory we cannot write to, so
+        # this is where a uid mismatch actually surfaces -- as a bare
+        # "unable to open database file". Translate it.
+        raise _explain(path, exc) from None
     conn.row_factory = sqlite3.Row
     try:
         conn.executescript(_SCHEMA)
