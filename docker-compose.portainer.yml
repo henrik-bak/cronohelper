@@ -1,35 +1,38 @@
-# Portainer stack variant: no `build:`, so it can be pasted straight into
-# Portainer's Web editor.
+# Portainer stack variant.
 #
-# Portainer cannot build from a Web-editor stack — there is no build context —
-# so the image has to already exist on the Unraid Docker daemon. Build it once
-# over SSH:
+# The one thing that must differ from docker-compose.unraid.yml: there is no
+# `env_file:` here. `env_file:` requires a literal .env file next to the
+# compose file, and .env is gitignored (it holds your Cronometer password), so
+# it is not in the clone — Portainer fails with
+# "env file /data/compose/<id>/.env not found" before starting anything.
 #
-#     cd /mnt/user/projects/cronohelper
-#     docker build -t cronohelper:latest .
+# Portainer's "Environment variables" panel feeds ${VAR} substitution, not
+# env_file, so credentials are declared under `environment:` below. That is
+# also the better arrangement: the password lives in Portainer rather than in
+# a plaintext file on a share.
 #
-# (or `docker save cronohelper:latest | ssh root@unraid docker load` from your
-# workstation). After that, redeploys are Portainer-only until the code
-# changes.
-#
-# If you would rather Portainer own the build too, put this project in a Git
-# repo and use Stacks -> Add stack -> Repository, pointing at
-# docker-compose.unraid.yml, which does have a `build:` stanza.
-#
-# Before deploying:
-#     mkdir -p /mnt/user/appdata/cronohelper
-#     chown -R 99:100 /mnt/user/appdata/cronohelper
-#
-# Set these in Portainer's "Environment variables" panel rather than shipping a
-# .env file onto a share — that is the one real advantage of doing this in
-# Portainer:
+# DEPLOY (Repository — recommended, Portainer builds it):
+#   Stacks -> Add stack -> Repository
+#     Repository URL   https://github.com/henrik-bak/cronohelper
+#     Compose path     docker-compose.portainer.yml
+#   Add these under "Environment variables":
 #     CRONOMETER_USERNAME   your Cronometer account email
 #     CRONOMETER_PASSWORD   your Cronometer password
 #     TZ                    Europe/Budapest
 #     PORT                  8080
 #
+# DEPLOY (Web editor — no build context available):
+#   Build the image over SSH first:
+#       cd /mnt/user/projects/cronohelper && docker build -t cronohelper:latest .
+#   then paste this file with `build: .` replaced by `image: cronohelper:latest`.
+#
+# ONE-TIME, on the Unraid box either way — nothing automates this:
+#     mkdir -p /mnt/user/appdata/cronohelper
+#     chown -R 99:100 /mnt/user/appdata/cronohelper
+#
 services:
   cronohelper:
+    build: .
     image: cronohelper:latest
     container_name: cronohelper
     restart: unless-stopped
@@ -40,8 +43,12 @@ services:
     user: "99:100"
 
     environment:
+      # These come from Portainer's Environment variables panel. The `:?`
+      # guards make a missing one fail the deploy with a message naming the
+      # variable, rather than starting a container that dies at login time.
       CRONOMETER_USERNAME: ${CRONOMETER_USERNAME:?set this in the Portainer stack UI}
       CRONOMETER_PASSWORD: ${CRONOMETER_PASSWORD:?set this in the Portainer stack UI}
+      # Diary entries are stamped in the account timezone.
       TZ: ${TZ:-Europe/Budapest}
       DATA_DIR: /data
 
@@ -50,4 +57,5 @@ services:
       - "${PORT:-8080}:8080"
 
     volumes:
+      # SQLite database, food-id cache, and the Cronometer session token.
       - /mnt/user/appdata/cronohelper:/data

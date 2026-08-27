@@ -78,6 +78,38 @@ from the compose command afterwards.
 The **Compose Manager** plugin from Community Applications gives the same thing
 through the GUI if you prefer, pointing it at the same file.
 
+### Portainer
+
+Use `docker-compose.portainer.yml`, **not** the Unraid one.
+
+*Stacks → Add stack → Repository*, compose path `docker-compose.portainer.yml`,
+and put the credentials in Portainer's **Environment variables** panel:
+`CRONOMETER_USERNAME`, `CRONOMETER_PASSWORD`, `TZ`, `PORT`. Portainer clones
+and builds the image itself, so redeploying is a button after a `git push` —
+no SSH.
+
+The two compose files differ in exactly one thing that matters here.
+`docker-compose.unraid.yml` uses `env_file: .env`, which requires a literal
+file next to it; `.env` is gitignored, so a Portainer stack built from the repo
+fails before starting anything:
+
+```
+failed to resolve services environment: env file /data/compose/2/.env not found
+```
+
+Loading variables into Portainer's UI does not fix that — the UI feeds `${VAR}`
+substitution, not `env_file`. `docker-compose.portainer.yml` declares the
+credentials under `environment:` instead, which is what the UI panel actually
+populates. It is also the better arrangement: the password lives in Portainer
+rather than in a plaintext file on a share.
+
+Missing variables fail the deploy with a message naming the variable, rather
+than starting a container that dies at login.
+
+The `mkdir` and `chown` above still have to be done once by hand — Portainer
+does not do it for you, and without it the container answers `/healthz` and
+returns 500 on everything else.
+
 ### Two cautions
 
 - **Credentials on a share.** `.env` holds your Cronometer password in plain

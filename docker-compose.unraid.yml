@@ -18,6 +18,12 @@
 #     chown -R 99:100 /mnt/user/appdata/cronohelper
 #     docker compose -f docker-compose.unraid.yml up -d --build
 #
+# NOT for Portainer. The `env_file:` below needs a literal .env next to this
+# file, and .env is gitignored, so a Portainer stack built from the repo fails
+# with "env file /data/compose/<id>/.env not found". Use
+# docker-compose.portainer.yml instead — same container, credentials taken
+# from Portainer's Environment variables panel.
+#
 services:
   cronohelper:
     build: .
