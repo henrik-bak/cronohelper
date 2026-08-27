@@ -103,6 +103,44 @@ function setState(msg, kind) {
   el.className = 'state' + (kind ? ' ' + kind : '');
 }
 
+/* POST JSON and always come back with something describable.
+ *
+ * Deliberately reads the body as text and parses it separately: a 500 from
+ * uvicorn is plain text, not JSON, so calling res.json() first would throw and
+ * the real server error would be reported as a network failure. `networkError`
+ * distinguishes "the request never completed" from "the server said no".
+ */
+async function postJson(url, body) {
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    return { ok: false, status: 0, data: null, networkError: true, message: e.message };
+  }
+
+  const raw = await res.text();
+  let data = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    /* not JSON — keep raw */
+  }
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    data,
+    networkError: false,
+    message:
+      (data && data.detail) ||
+      (raw ? `HTTP ${res.status}: ${raw.slice(0, 300)}` : `HTTP ${res.status}`),
+  };
+}
+
 /* --- parse -------------------------------------------------------------- */
 
 async function doParse() {
@@ -159,28 +197,22 @@ async function doParse() {
 async function doResolve() {
   if (!state.parsed) return;
   setState('Checking your Cronometer foods…');
-  try {
-    const res = await fetch('/api/resolve', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildPayload()),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      state.resolveError = data.detail || `HTTP ${res.status}`;
-      setState(state.resolveError, 'err');
-      render();
-      return;
-    }
-    state.resolutions = {};
-    for (const d of data.dishes || []) state.resolutions[d.normalized_name] = d;
-    state.resolveError = '';
-  } catch (e) {
-    state.resolveError = 'Could not reach the server to check foods.';
+
+  const r = await postJson('/api/resolve', buildPayload());
+  if (!r.ok) {
+    state.resolveError = r.networkError
+      ? `Lost the connection while checking foods (${r.message}). ` +
+        `The first check has to log in to Cronometer and look up every dish, ` +
+        `so it can take a while; check the container logs if it keeps failing.`
+      : r.message;
     setState(state.resolveError, 'err');
     render();
     return;
   }
+
+  state.resolutions = {};
+  for (const d of r.data.dishes || []) state.resolutions[d.normalized_name] = d;
+  state.resolveError = '';
 
   render();
   const n = conflicts().length;
@@ -353,22 +385,13 @@ async function linkFood(name, rawId) {
     setState('Enter a numeric Cronometer food id to link.', 'warn');
     return;
   }
-  try {
-    const res = await fetch('/api/foods/link', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, food_id: foodId }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setState(data.detail || `Link failed (HTTP ${res.status}).`, 'err');
-      return;
-    }
-    setState(`Linked “${name}” to ${data.food.name} (${foodId}).`, 'ok');
-    doResolve();
-  } catch (e) {
-    setState('Could not reach the server.', 'err');
+  const r = await postJson('/api/foods/link', { name, food_id: foodId });
+  if (!r.ok) {
+    setState(r.message, 'err');
+    return;
   }
+  setState(`Linked “${name}” to ${r.data.food.name} (${foodId}).`, 'ok');
+  doResolve();
 }
 
 function renderGrid() {
@@ -685,26 +708,21 @@ async function doImport() {
   renderConfirm();
   setState('Writing to Cronometer…');
 
-  let data;
-  try {
-    const res = await fetch('/api/import', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    data = await res.json();
-    if (!res.ok) {
-      setState(data.detail || `Import failed (HTTP ${res.status}).`, 'err');
-      state.busy = false;
-      renderConfirm();
-      return;
-    }
-  } catch (e) {
-    setState('Could not reach the server.', 'err');
+  const r = await postJson('/api/import', payload);
+  if (!r.ok) {
+    setState(
+      r.networkError
+        ? `Lost the connection during the import (${r.message}). Some entries ` +
+          `may already have been written — re-run it; anything written ` +
+          `already will come back as skipped.`
+        : r.message,
+      'err'
+    );
     state.busy = false;
     renderConfirm();
     return;
   }
+  const data = r.data;
 
   state.busy = false;
   renderResults(data);

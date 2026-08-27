@@ -171,6 +171,30 @@ def test_link_with_an_unknown_food_id_fails_without_binding(api):
         assert db.get_cached_food(conn, normalize_dish_name(FRIDAY_DISH)) is None
 
 
+# --- unhandled errors stay readable ----------------------------------------
+
+
+def test_an_unexpected_error_returns_json_not_a_plaintext_500(api, monkeypatch):
+    # Uvicorn's default 500 body is plain text, which the browser cannot parse.
+    # That turned every server-side bug into a misleading "could not reach the
+    # server" in the UI, so unhandled errors must come back as JSON.
+    def boom(*a, **kw):
+        raise RuntimeError("something upstream changed shape")
+
+    monkeypatch.setattr(main, "resolve_all", boom)
+    client = TestClient(main.app, raise_server_exceptions=False)
+
+    r = client.post("/api/resolve", json=payload_from(parse(api)))
+
+    assert r.status_code == 500
+    body = r.json()
+    assert "RuntimeError" in body["detail"]
+    assert "/api/resolve" in body["detail"]
+    # The exception's own message may quote internals; only its type is safe
+    # to surface, and the traceback belongs in the log.
+    assert "something upstream changed shape" not in body["detail"]
+
+
 # --- credential hygiene ----------------------------------------------------
 
 

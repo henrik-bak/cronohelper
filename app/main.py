@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -43,6 +43,30 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+    """Never let an unhandled error leave as a plain-text 500.
+
+    Uvicorn's default 500 body is not JSON, which means the browser cannot
+    read it and reports a useless "could not reach the server". Returning
+    structured JSON keeps the real cause visible in the UI.
+
+    Only the exception *type* goes in the response. The full traceback goes to
+    the log, where it cannot end up on a screen or in a screenshot.
+    """
+    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                f"Internal error ({type(exc).__name__}) in {request.url.path}. "
+                "Nothing further was written. See the container logs "
+                "(`docker logs cronohelper`) for the traceback."
+            )
+        },
+    )
 
 
 @lru_cache(maxsize=1)
