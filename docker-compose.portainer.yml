@@ -24,7 +24,9 @@
 # DEPLOY (Web editor — no build context available):
 #   Build the image over SSH first:
 #       cd /mnt/user/projects/cronohelper && docker build -t cronohelper:latest .
-#   then paste this file with `build: .` replaced by `image: cronohelper:latest`.
+#   then paste this file with `build: .` replaced by `image: cronohelper:latest`,
+#   and turn OFF any "pull latest image" / "re-pull image" toggle — the image
+#   is local only and a pull will fail.
 #
 # ONE-TIME, on the Unraid box either way — nothing automates this:
 #     mkdir -p /mnt/user/appdata/cronohelper
@@ -32,8 +34,19 @@
 #
 services:
   cronohelper:
+    # `build:` with NO `image:` key, deliberately. Portainer runs a pull before
+    # `up`, and `docker compose pull` skips a service that only has `build:`
+    # ("No image to be pulled") — but if an `image:` name is also present it
+    # tries to pull *that*, and fails:
+    #
+    #     pull access denied for cronohelper, repository does not exist
+    #
+    # because the image only ever exists locally. Without `image:` the pull is
+    # skipped and `up` builds it, which is what we want.
+    #
+    # For the Web-editor route below there is no build context, so there you
+    # DO add `image: cronohelper:latest` and remove this `build:` line.
     build: .
-    image: cronohelper:latest
     container_name: cronohelper
     restart: unless-stopped
 
